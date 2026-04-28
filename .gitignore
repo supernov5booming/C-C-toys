@@ -1,35 +1,20 @@
-# ==========================
-# IDE 配置文件（每个人不同）
-# ==========================
+# IDE
 .vscode/
-.idea/
-.DS_Store
 
-# ==========================
-# 编译生成的文件（必须忽略）
-# ==========================
+# 编译产物
 build/
-cmake-build-*/
+cmake-build-debug/
+cmake-build-release/
 *.o
 *.out
-*.exe
 *.so
 *.a
+*.exe
 *.dll
 *.dylib
 
-# ==========================
-# CMake 自动生成的文件
-# ==========================
+# CMake 自动生成
 Makefile
 CMakeCache.txt
 CMakeFiles/
 cmake_install.cmake
-*.cmake
-
-# ==========================
-# 日志 / 临时文件
-# ==========================
-*.log
-*.tmp
-temp/
