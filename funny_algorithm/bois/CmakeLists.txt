@@ -1,0 +1,30 @@
+cmake_minimum_required(VERSION 3.10)
+project(raylib-first)
+
+# 指向 raylib 源码目录
+set(RAYLIB_SRC_PATH "D:/WorkSpace/games101/libraray/raylib")
+
+# 添加头文件
+include_directories(${RAYLIB_SRC_PATH}/src)
+include_directories(${RAYLIB_SRC_PATH}/build/raylib)
+
+# 添加构建后的库文件路径
+link_directories(${RAYLIB_SRC_PATH}/build/raylib)
+
+# ========== 第一个可执行文件 ==========
+add_executable(raylib-first ./space_c_a/main.cpp)
+target_link_libraries(raylib-first 
+    raylib 
+    gdi32 
+    winmm 
+    opengl32
+)
+
+# ========== 第二个可执行文件 ==========
+add_executable(raylib-boris ./bois/boris.cpp ./bois/drawArrow.h)
+target_link_libraries(raylib-boris 
+    raylib 
+    gdi32 
+    winmm 
+    opengl32
+)

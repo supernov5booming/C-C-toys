@@ -1,0 +1,554 @@
+算术编码与 ANS：超越 Huffman
+2026-05-11 · algorithms · #arithmetic-coding #ans #rans #entropy-coding #compression
+
+目录−
+一、从 Huffman 的天花板说起
+缓解但无法根治
+二、算术编码：区间细分的艺术
+基本原理
+数学公式化
+解码过程
+三、二进制小数表示与重归一化
+重归一化（Renormalization）
+整数实现
+四、Range Coder：无专利的实用替代
+Range Coder 的核心区别
+Range Coder 实现
+性能比较
+五、ANS：Jarek Duda 的革命性突破
+核心洞察
+从均匀到非均匀
+信息论的优美
+六、rANS 与 tANS：两种实现路径
+rANS：基于算术运算
+tANS：基于查找表
+rANS vs tANS 对比
+七、Streaming rANS：逆向编码，正向解码
+为什么需要逆向编码
+实际实现策略
+逆向编码的缓冲区管理
+八、完整 rANS 编解码器实现
+代码要点解析
+九、基准测试：Huffman vs 算术编码 vs rANS
+测试方法
+压缩率对比
+速度对比
+综合评分
+十、专利历史：算术编码的枷锁与 ANS 的自由
+算术编码的专利困局
+ANS 的开放之路
+十一、工程实践中的陷阱与细节
+关键陷阱速查表
+频率表量化的艺术
+状态空间的选择
+十二、现实世界中的 ANS 应用
+JPEG XL (2020-)
+LZFSE (Apple, 2016)
+zstd / FSE (Facebook/Meta, 2015-)
+其他应用
+十三、ANS 与算术编码的深度对比
+信息论视角
+操作复杂度
+为什么 ANS 更快
+什么时候仍然选择算术编码
+十四、个人思考
+十五、参考资料
+一、从 Huffman 的天花板说起
+1952 年，David Huffman 在 MIT 的课堂作业中提出了 Huffman 编码。七十多年过去了，它依然是最广为人知的熵编码方案。但 Huffman 编码有一个根本性的局限：每个符号至少编码为 1 比特。
+
+这意味着什么？考虑一个极端但常见的情况。假设某个符号的出现概率为 0.95，其信息熵为：
+
+H = -log2(0.95) = 0.074 bits
+理论上，我们只需要 0.074 比特就能编码这个符号。但 Huffman 编码最短的码字就是 1 比特，这导致实际编码长度是理论最优值的 13.5 倍。
+
+这不是理论上的吹毛求疵。在现实中，这种情况非常普遍：
+
+LZ77 系列压缩：match/literal 标志位（概率极度不均衡）
+图像编码：预测残差集中在零附近
+二进制算术编码：上下文建模后的二值化符号
+通用数据压缩：经过上下文建模后，许多符号概率极高
+让我们量化这个问题。对于一个二符号信源，Huffman 编码的冗余率为：
+
+冗余 = 1 - H(p)    (当 p > 0.5 时)
+当 p = 0.95 时，冗余率高达 92.6%。这就是 Huffman 的 “1 比特粒度” 问题。
+
+缓解但无法根治
+有几种方法可以缓解这个问题：
+
+分组编码（Block Coding）：将 n 个符号分为一组，联合编码。字母表大小从 k 膨胀到 k^n，码表指数增长。实践中 n 很难取大。
+
+游程编码（Run-Length Coding）：对连续重复符号先做游程统计，再 Huffman 编码。但这引入了额外的建模假设，且只对特定分布有效。
+
+// Huffman 编码的核心矛盾：离散码字 vs 连续信息量
+// 符号概率  信息量(bits)  Huffman最短码字  浪费
+// 0.95      0.074         1 bit           92.6%
+// 0.80      0.322         1 bit           67.8%
+// 0.50      1.000         1 bit            0.0%
+// 0.25      2.000         2 bits           0.0%
+// 0.10      3.322         3 bits           9.6%  (或4bits=20.4%)
+根本的解决方案是：彻底放弃为每个符号分配整数比特码字的思路。这就是算术编码的核心洞察。
+
+二、算术编码：区间细分的艺术
+算术编码的核心思想可以用一句话概括：将整个消息编码为 [0, 1) 区间上的一个子区间，最终输出落在该子区间内的最短二进制小数。
+
+基本原理
+假设我们有一个三符号信源 {A, B, C}，概率分别为 P(A)=0.6, P(B)=0.3, P(C)=0.1。
+
+首先，将 [0, 1) 区间按概率划分：
+
+A: [0.0, 0.6)
+B: [0.6, 0.9)
+C: [0.9, 1.0)
+编码消息 “BAC” 的过程如下：
+
+初始区间: [0.0, 1.0)    宽度 = 1.0
+
+编码 'B':
+  新下界 = 0.0 + 1.0 * 0.6 = 0.6
+  新上界 = 0.0 + 1.0 * 0.9 = 0.9
+  区间: [0.6, 0.9)       宽度 = 0.3
+
+编码 'A':
+  新下界 = 0.6 + 0.3 * 0.0 = 0.6
+  新上界 = 0.6 + 0.3 * 0.6 = 0.78
+  区间: [0.6, 0.78)      宽度 = 0.18
+
+编码 'C':
+  新下界 = 0.6 + 0.18 * 0.9 = 0.762
+  新上界 = 0.6 + 0.18 * 1.0 = 0.78
+  区间: [0.762, 0.78)    宽度 = 0.018
+最终区间为 [0.762, 0.78)。我们需要找到落在这个区间内的最短二进制小数。
+
+数学公式化
+设累积分布函数为 C(s)，符号 s 的概率为 P(s)。编码过程维护一个区间 [low, high)：
+
+对每个输入符号 s:
+    range = high - low
+    high  = low + range * (C(s) + P(s))
+    low   = low + range * C(s)
+最终区间的宽度等于所有符号概率的乘积：
+
+width = P(s1) * P(s2) * ... * P(sn)
+需要的比特数约为：
+
+bits = -log2(width) = -sum(log2(P(si))) = sum(H(si))
+这恰好等于信息熵。算术编码在理论上能够达到信息论的极限。
+
+解码过程
+解码是编码的逆过程。已知最终的编码值 value 落在 [0.762, 0.78) 内：
+
+value = 0.762
+
+步骤1: value 落在 [0.6, 0.9) 中 -> 解码 'B'
+  value = (0.762 - 0.6) / 0.3 = 0.54
+
+步骤2: value 落在 [0.0, 0.6) 中 -> 解码 'A'
+  value = (0.54 - 0.0) / 0.6 = 0.9
+
+步骤3: value 落在 [0.9, 1.0) 中 -> 解码 'C'
+  value = (0.9 - 0.9) / 0.1 = 0.0
+
+输出: BAC
+三、二进制小数表示与重归一化
+上一节展示的 “教科书版” 算术编码有一个致命的实际问题：随着编码的进行，区间宽度不断缩小，需要的精度越来越高。编码一个 1MB 的文件，理论上需要数百万位的精度。
+
+重归一化（Renormalization）
+解决方案是重归一化：当区间的上半部分或下半部分确定后，立即输出对应的比特，然后将区间 “放大” 回去。
+
+区间 [low, high) 的三种情况：
+
+情况1: high <= 0.5
+  -> 区间完全落在 [0, 0.5) 中
+  -> 输出比特 '0'
+  -> low  = 2 * low
+  -> high = 2 * high
+
+情况2: low >= 0.5
+  -> 区间完全落在 [0.5, 1.0) 中
+  -> 输出比特 '1'
+  -> low  = 2 * (low - 0.5)
+  -> high = 2 * (high - 0.5)
+
+情况3: low < 0.5 <= high
+  -> 区间横跨中点，暂时无法输出
+  -> 如果 low >= 0.25 且 high < 0.75:
+     -> 记录一次 "underflow"
+     -> low  = 2 * (low - 0.25)
+     -> high = 2 * (high - 0.25)
+整数实现
+实际实现中，我们使用整数算术来避免浮点精度问题。设精度为 N 位（通常 N=32 或 N=16）：
+
+#define PRECISION  32
+#define WHOLE      (1ULL << PRECISION)      // 1.0
+#define HALF       (1ULL << (PRECISION-1))  // 0.5
+#define QUARTER    (1ULL << (PRECISION-2))  // 0.25
+
+// 编码过程（整数版）
+void encode_symbol(uint32_t cum_freq, uint32_t sym_freq, uint32_t total_freq) {
+    uint64_t range = (uint64_t)(high - low) + 1;
+    high = low + (range * (cum_freq + sym_freq)) / total_freq - 1;
+    low  = low + (range * cum_freq) / total_freq;
+
+    // 重归一化循环
+    for (;;) {
+        if (high < HALF) {
+            output_bit(0);
+            while (pending > 0) { output_bit(1); pending--; }
+        } else if (low >= HALF) {
+            output_bit(1);
+            while (pending > 0) { output_bit(0); pending--; }
+            low  -= HALF;
+            high -= HALF;
+        } else if (low >= QUARTER && high < 3 * QUARTER) {
+            pending++;
+            low  -= QUARTER;
+            high -= QUARTER;
+        } else {
+            break;
+        }
+        low  = 2 * low;
+        high = 2 * high + 1;
+    }
+}
+这段代码的关键在于 pending 计数器，它处理了 “快要收敛但还没收敛” 的尴尬情况。当区间横跨中点但集中在中间时，我们无法立即输出比特，但可以记录下 “一旦确定方向，需要输出多少个相反的比特”。
+
+四、Range Coder：无专利的实用替代
+算术编码的一个重大问题是专利。IBM 在 1970 年代末到 1980 年代对算术编码的核心技术申请了大量专利。这使得很多开源项目和商业软件不敢使用算术编码。
+
+1999 年，G. Nigel N. Martin 提出了 Range Coder（区间编码器），它在数学上等价于算术编码，但通过一个巧妙的工程变换规避了专利问题：以字节而非比特为单位进行重归一化。
+
+Range Coder 的核心区别
+算术编码器:
+  - 逐比特输出
+  - 需要处理 underflow (pending bits)
+  - 精确到比特级别
+  - 受 IBM 专利保护
+
+Range Coder:
+  - 逐字节输出
+  - 用 "进位传播" 替代 underflow
+  - 精度损失约 0.01%（可忽略）
+  - 无专利问题
+Range Coder 实现
+Range Coder 的核心思想是维护两个变量：range（区间宽度）和 low（区间下界）。
+
+typedef struct {
+    uint32_t range;
+    uint32_t low;
+    uint32_t cache;
+    uint32_t cache_size;
+    uint8_t *output;
+    size_t   out_pos;
+} RangeEncoder;
+
+void rc_init_encoder(RangeEncoder *rc, uint8_t *output) {
+    rc->range      = 0xFFFFFFFF;
+    rc->low        = 0;
+    rc->cache      = 0;
+    rc->cache_size = 1;
+    rc->output     = output;
+    rc->out_pos    = 0;
+}
+
+static void rc_shift_low(RangeEncoder *rc) {
+    // 检查是否需要进位
+    if ((uint32_t)rc->low < 0xFF000000 || (rc->low >> 32)) {
+        uint32_t carry = (uint32_t)(rc->low >> 32);
+        rc->output[rc->out_pos++] = (uint8_t)(rc->cache + carry);
+        while (rc->cache_size > 1) {
+            rc->output[rc->out_pos++] = (uint8_t)(carry + 0xFF);
+            rc->cache_size--;
+        }
+        rc->cache = (uint32_t)((rc->low >> 24) & 0xFF);
+    } else {
+        rc->cache_size++;
+    }
+    rc->low = (uint32_t)(rc->low << 8);
+}
+
+void rc_encode(RangeEncoder *rc, uint32_t cum_freq, uint32_t freq, uint32_t total) {
+    rc->range /= total;
+    rc->low   += cum_freq * rc->range;
+    rc->range *= freq;
+
+    // 字节级重归一化
+    while (rc->range < (1 << 24)) {
+        rc->range <<= 8;
+        rc_shift_low(rc);
+    }
+}
+Range Coder 的进位处理机制比算术编码的 underflow 处理更简洁。当 low 可能产生进位时（即高位不确定），我们将字节暂存在 cache 中，等到确定不会进位时再一起输出。
+
+性能比较
+Range Coder 相比经典算术编码有以下优势：
+
+特性            算术编码       Range Coder
+----           --------       -----------
+输出粒度        比特            字节
+压缩率损失      0              约 0.01%
+编码速度        较慢(逐位)      较快(逐字节)
+解码速度        较慢            较快
+实现复杂度      中等(underflow)  中等(进位)
+专利问题        有              无
+在实践中，Range Coder 的 0.01% 压缩率损失完全可以忽略，而字节级操作带来的速度提升却是实实在在的。这就是为什么 7-Zip 的 LZMA 算法选择了 Range Coder 而不是经典算术编码。
+
+五、ANS：Jarek Duda 的革命性突破
+2009 年，波兰数学家 Jarek Duda 在 arXiv 上发表了一篇论文，提出了 Asymmetric Numeral Systems（非对称数字系统，简称 ANS）。这项工作几乎完全改变了现代数据压缩的格局。
+
+核心洞察
+ANS 的核心思想可以用一个类比来理解。
+
+传统的算术编码维护一个区间 [low, high)，编码一个符号就是将这个区间细分。这需要两个状态变量（low 和 high），以及它们之间复杂的交互。
+
+ANS 只维护一个整数状态 x。编码一个符号就是对 x 做一次变换，解码就是逆变换。整个过程可以看作是在一个很大的整数上 “编码信息”。
+
+最简单的 ANS 是 uANS（Uniform ANS），适用于均匀分布：
+
+编码: x' = x * M + s        (s 是 0 到 M-1 的符号)
+解码: s  = x % M,  x = x / M
+这就是 M 进制数字系统。但问题是：如何处理非均匀分布？
+
+从均匀到非均匀
+Duda 的天才之处在于找到了一种方法，使得这种 “数字系统” 能够适应任意概率分布。核心公式为：
+
+设符号 s 的频率为 f_s，累积频率为 c_s，总频率为 M
+
+编码 (Encoding):
+  x' = floor(x / f_s) * M + (x mod f_s) + c_s
+
+解码 (Decoding):
+  slot = x mod M
+  找到 s 使得 c_s <= slot < c_s + f_s
+  x' = f_s * floor(x / M) + slot - c_s
+这里的关键性质是：编码和解码互为逆运算。也就是说，如果编码将 x 映射到 x’，那么解码将 x’ 映射回 x，同时恢复出符号 s。
+
+信息论的优美
+为什么 ANS 能达到熵极限？考虑编码一个频率为 f_s 的符号：
+
+x' 大约等于 x * M / f_s
+
+log2(x') 约等于 log2(x) + log2(M/f_s)
+                = log2(x) + log2(1/P(s))
+也就是说，状态 x 的 “信息量”（以 log2(x) 衡量）增加了恰好 -log2(P(s)) 比特，这正是符号 s 的信息熵。
+
+六、rANS 与 tANS：两种实现路径
+ANS 有两种主要的实现变体：rANS（range ANS）和 tANS（table ANS）。
+
+rANS：基于算术运算
+rANS 直接使用上一节的数学公式进行编码和解码。它的特点是：
+
+使用除法和取模运算
+不需要大型查找表
+适合频率表动态变化的场景
+编码器和解码器使用相同的频率表
+rANS 的状态空间管理（重归一化）：
+
+编码时的重归一化:
+  状态 x 必须保持在 [L, b*L) 范围内
+  L = 下界 (通常 L = 2^23 对于 32 位实现)
+  b = 输出基数 (通常 b = 2^8 = 256，即字节输出)
+
+  编码符号 s 之前:
+    x_max = floor(b*L / M) * f_s - 1
+    while (x > x_max):
+      输出 x 的低 8 位
+      x >>= 8
+
+  然后执行 ANS 编码公式
+tANS：基于查找表
+tANS 将整个 ANS 编码和解码过程预计算为一张查找表（有限状态机）。它的特点是：
+
+没有除法操作（用表查找替代）
+编码和解码都是 O(1) 的表查找 + 位移操作
+需要预计算查找表
+查找表的大小为 L 项（通常 L = 1024 到 4096）
+不适合频率表频繁变化的场景
+tANS 的查找表构建过程：
+
+1. 选择表大小 L（通常 L = 2^R，R 在 10-12 之间）
+2. 将 [0, L) 的位置按照符号频率分配给各符号
+3. 对每个状态 x in [L, 2L):
+   - 确定 x 对应的符号 s
+   - 计算编码后的新状态和需要输出的比特数
+   - 存入查找表
+rANS vs tANS 对比
+特性              rANS              tANS
+---------        -------           -------
+核心操作          除法 + 取模        表查找
+编码速度          中等              极快
+解码速度          快                极快
+内存使用          小 (频率表)        大 (查找表)
+频率表切换        快速              需要重建表
+适用场景          自适应压缩         静态/半静态压缩
+典型应用          通用压缩器         zstd (FSE)
+实际工程中的选择：
+
+LZFSE（Apple）：使用 tANS，因为 LZ 解析后的符号分布相对固定
+zstd（Facebook/Meta）：使用 tANS（称为 FSE），为每个压缩块预计算查找表
+JPEG XL：使用 rANS，因为需要在图像块之间快速切换上下文
+七、Streaming rANS：逆向编码，正向解码
+ANS 有一个 “反直觉” 的特性：编码必须逆序进行，而解码是正序的。这个特性来自于 ANS 的栈（LIFO）语义。
+
+为什么需要逆向编码
+ANS 的编码和解码可以看作是在一个栈上的操作：
+
+编码 = push (将信息压入状态)
+解码 = pop  (从状态中取出信息)
+
+如果编码顺序是 s1, s2, s3:
+  push(x, s1) -> x1
+  push(x1, s2) -> x2
+  push(x2, s3) -> x3
+
+解码顺序是 s3, s2, s1:
+  pop(x3) -> (x2, s3)
+  pop(x2) -> (x1, s2)
+  pop(x1) -> (x, s1)
+如果我们希望解码器按照 s1, s2, s3 的顺序输出符号，那么编码器必须按照 s3, s2, s1 的逆序编码。
+
+实际实现策略
+在实际实现中，有几种策略来处理这个问题：
+
+策略一：缓冲整个块
+
+最简单的方法是将输入数据按块处理，将每个块的符号读入缓冲区，然后逆序编码：
+
+// 将符号缓冲到数组中
+for (i = 0; i < block_size; i++) {
+    symbols[i] = read_next_symbol();
+}
+
+// 逆序编码
+for (i = block_size - 1; i >= 0; i--) {
+    rans_encode(&state, symbols[i], &output);
+}
+策略二：交错多个 rANS 流
+
+这是一种高性能技巧，使用多个独立的 rANS 状态并行处理：
+
+// 4 路交错 rANS
+uint32_t state[4];
+for (i = block_size - 4; i >= 0; i -= 4) {
+    rans_encode(&state[3], symbols[i+3], &output);
+    rans_encode(&state[2], symbols[i+2], &output);
+    rans_encode(&state[1], symbols[i+1], &output);
+    rans_encode(&state[0], symbols[i+0], &output);
+}
+
+// 写入 4 个最终状态
+write_state(state[0]); write_state(state[1]);
+write_state(state[2]); write_state(state[3]);
+交错的好处是：
+
+指令级并行：4 个独立的编码操作没有数据依赖
+解码端同样可以并行：4 个解码器独立工作
+隐藏延迟：除法指令的延迟被其他流的操作覆盖
+这种技巧在 SIMD 优化中尤为重要，现代处理器上可以获得 2-3 倍的吞吐量提升。
+
+逆向编码的缓冲区管理
+编码器生成的比特流也是逆序的，这需要特殊的缓冲区管理：
+
+typedef struct {
+    uint8_t *buf;        // 缓冲区起始
+    uint8_t *buf_end;    // 缓冲区末尾
+    uint8_t *ptr;        // 当前写入位置（从末尾向前）
+} RansOutBuf;
+
+void rans_out_init(RansOutBuf *ob, uint8_t *buf, size_t size) {
+    ob->buf     = buf;
+    ob->buf_end = buf + size;
+    ob->ptr     = buf + size;  // 从末尾开始写
+}
+
+void rans_out_byte(RansOutBuf *ob, uint8_t byte) {
+    *(--ob->ptr) = byte;  // 向前写入
+}
+八、完整 rANS 编解码器实现
+下面是一个完整的、可编译运行的 rANS 编解码器 C 实现。
+
+/* rans.c -- 完整的 rANS 编解码器
+ *
+ * 编译: gcc -O2 -o rans rans.c
+ * 运行: ./rans
+ *
+ * 参数说明:
+ *   RANS_L     = 状态下界 (2^23)
+ *   RANS_SCALE = 频率精度 (2^12 = 4096)
+ *   RANS_BYT   = 输出基数 (2^8 = 256，字节对齐)
+ */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <string.h>
+#include <assert.h>
+#include <math.h>
+#include <time.h>
+
+/* ------------------------------------------------------------------ */
+/*  基本参数                                                           */
+/* ------------------------------------------------------------------ */
+
+#define RANS_L          (1u << 23)          /* 状态下界 L              */
+#define RANS_SCALE_BITS 12                  /* 频率表精度比特数         */
+#define RANS_SCALE      (1u << RANS_SCALE_BITS) /* M = 4096           */
+
+typedef uint32_t RansState;
+
+/* ------------------------------------------------------------------ */
+/*  符号统计结构                                                       */
+/* ------------------------------------------------------------------ */
+
+typedef struct {
+    uint16_t freq;       /* 量化后的频率 f_s               */
+    uint16_t cum_freq;   /* 累积频率 c_s                   */
+} RansSymbol;
+
+typedef struct {
+    RansSymbol sym[256];         /* 每个字节值的频率信息   */
+    uint8_t    cum2sym[RANS_SCALE]; /* 累积频率 -> 符号 查找表 */
+} RansStats;
+
+/* ------------------------------------------------------------------ */
+/*  构建频率表                                                         */
+/* ------------------------------------------------------------------ */
+
+static void stats_build(RansStats *st, const uint8_t *data, size_t len) {
+    uint32_t counts[256] = {0};
+    size_t i;
+
+    for (i = 0; i < len; i++)
+        counts[data[i]]++;
+
+    /* 将原始频率量化到 [0, RANS_SCALE] 范围 */
+    /* 确保每个出现过的符号至少有频率 1         */
+    uint32_t total = 0;
+    uint16_t freqs[256] = {0};
+
+    for (i = 0; i < 256; i++) {
+        if (counts[i] > 0) {
+            freqs[i] = (uint16_t)((uint64_t)counts[i] * RANS_SCALE / len);
+            if (freqs[i] == 0)
+                freqs[i] = 1;
+            total += freqs[i];
+        }
+    }
+
+    /* 调整总频率使其精确等于 RANS_SCALE */
+    /* 找到频率最大的符号来吸收误差       */
+    int32_t diff = (int32_t)RANS_SCALE - (int32_t)total;
+    if (diff != 0) {
+        uint32_t max_freq = 0;
+        int max_idx = 0;
+        for (i = 0; i < 256; i++) {
+            if (freqs[i] > max_freq) {
+                max_freq = freqs[i];
+                max_idx = (int)i;
+            }
+        }
+        freqs[max_idx] = (uint16_t)((int32_t)freqs[max_idx] + diff);
+    }
+
+    /* 构建累积频率表和逆查找表 */
+    uint16_t cum = 0;
+    for (i = 0; i < 256; i++) {

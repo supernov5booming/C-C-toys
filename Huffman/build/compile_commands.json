@@ -1,0 +1,38 @@
+[
+{
+  "directory": "D:/WorkSpace/C-toys/Huffman/build",
+  "command": "D:\\WorkSpace\\games101\\libraray\\mingw64\\bin\\g++.exe  @CMakeFiles/Huffman.dir/includes_CXX.rsp -g -o CMakeFiles\\Huffman.dir\\src\\Bitstream.cpp.obj -c D:\\WorkSpace\\C-toys\\Huffman\\src\\Bitstream.cpp",
+  "file": "D:/WorkSpace/C-toys/Huffman/src/Bitstream.cpp",
+  "output": "CMakeFiles/Huffman.dir/src/Bitstream.cpp.obj"
+},
+{
+  "directory": "D:/WorkSpace/C-toys/Huffman/build",
+  "command": "D:\\WorkSpace\\games101\\libraray\\mingw64\\bin\\g++.exe  @CMakeFiles/Huffman.dir/includes_CXX.rsp -g -o CMakeFiles\\Huffman.dir\\src\\FileProcess.cpp.obj -c D:\\WorkSpace\\C-toys\\Huffman\\src\\FileProcess.cpp",
+  "file": "D:/WorkSpace/C-toys/Huffman/src/FileProcess.cpp",
+  "output": "CMakeFiles/Huffman.dir/src/FileProcess.cpp.obj"
+},
+{
+  "directory": "D:/WorkSpace/C-toys/Huffman/build",
+  "command": "D:\\WorkSpace\\games101\\libraray\\mingw64\\bin\\g++.exe  @CMakeFiles/Huffman.dir/includes_CXX.rsp -g -o CMakeFiles\\Huffman.dir\\src\\FolderArchiver.cpp.obj -c D:\\WorkSpace\\C-toys\\Huffman\\src\\FolderArchiver.cpp",
+  "file": "D:/WorkSpace/C-toys/Huffman/src/FolderArchiver.cpp",
+  "output": "CMakeFiles/Huffman.dir/src/FolderArchiver.cpp.obj"
+},
+{
+  "directory": "D:/WorkSpace/C-toys/Huffman/build",
+  "command": "D:\\WorkSpace\\games101\\libraray\\mingw64\\bin\\g++.exe  @CMakeFiles/Huffman.dir/includes_CXX.rsp -g -o CMakeFiles\\Huffman.dir\\src\\HuffmanCompressor.cpp.obj -c D:\\WorkSpace\\C-toys\\Huffman\\src\\HuffmanCompressor.cpp",
+  "file": "D:/WorkSpace/C-toys/Huffman/src/HuffmanCompressor.cpp",
+  "output": "CMakeFiles/Huffman.dir/src/HuffmanCompressor.cpp.obj"
+},
+{
+  "directory": "D:/WorkSpace/C-toys/Huffman/build",
+  "command": "D:\\WorkSpace\\games101\\libraray\\mingw64\\bin\\g++.exe  @CMakeFiles/Huffman.dir/includes_CXX.rsp -g -o CMakeFiles\\Huffman.dir\\src\\HuffmanTree.cpp.obj -c D:\\WorkSpace\\C-toys\\Huffman\\src\\HuffmanTree.cpp",
+  "file": "D:/WorkSpace/C-toys/Huffman/src/HuffmanTree.cpp",
+  "output": "CMakeFiles/Huffman.dir/src/HuffmanTree.cpp.obj"
+},
+{
+  "directory": "D:/WorkSpace/C-toys/Huffman/build",
+  "command": "D:\\WorkSpace\\games101\\libraray\\mingw64\\bin\\g++.exe  @CMakeFiles/Huffman.dir/includes_CXX.rsp -g -o CMakeFiles\\Huffman.dir\\src\\main.cpp.obj -c D:\\WorkSpace\\C-toys\\Huffman\\src\\main.cpp",
+  "file": "D:/WorkSpace/C-toys/Huffman/src/main.cpp",
+  "output": "CMakeFiles/Huffman.dir/src/main.cpp.obj"
+}
+]
