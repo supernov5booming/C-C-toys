@@ -1,4 +1,0 @@
-D:/WorkSpace/games101/funny_a/build/CMakeFiles/raylib-first.dir
-D:/WorkSpace/games101/funny_a/build/CMakeFiles/raylib-boris.dir
-D:/WorkSpace/games101/funny_a/build/CMakeFiles/edit_cache.dir
-D:/WorkSpace/games101/funny_a/build/CMakeFiles/rebuild_cache.dir

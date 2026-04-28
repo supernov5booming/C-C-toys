@@ -1,3 +1,0 @@
-"C:\Program Files\CMake\bin\cmake.exe" -E rm -f CMakeFiles\raylib-boris.dir/objects.a
-D:\WorkSpace\games101\libraray\mingw64\bin\ar.exe qc CMakeFiles\raylib-boris.dir/objects.a @CMakeFiles\raylib-boris.dir\objects1.rsp
-D:\WorkSpace\games101\libraray\mingw64\bin\c++.exe -Wl,--whole-archive CMakeFiles\raylib-boris.dir/objects.a -Wl,--no-whole-archive -o raylib-boris.exe -Wl,--out-implib,libraylib-boris.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\raylib-boris.dir\linkLibs.rsp
